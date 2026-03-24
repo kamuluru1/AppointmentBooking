@@ -8,6 +8,9 @@ import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -18,6 +21,7 @@ import com.webprogramming.roomreserve.dto.LoginDto;
 import com.webprogramming.roomreserve.dto.RegisterDto;
 import com.webprogramming.roomreserve.entities.User;
 import com.webprogramming.roomreserve.repositories.UserRepository;
+import com.webprogramming.roomreserve.security_config.CustomUserDetailsService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -31,6 +35,9 @@ public class AuthController {
     
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private CustomUserDetailsService customUserDetailsService;
 
     @PostMapping("/register")
     public ResponseEntity<?> registerUser(@RequestBody RegisterDto registerDto) {
@@ -51,16 +58,24 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> loginUser(@RequestBody LoginDto loginDto) {
+    public ResponseEntity<?> loginUser(@RequestBody LoginDto loginDto, HttpServletRequest request) {
         Optional<User> userOptional = userRepository.findByEmail(loginDto.getEmail());
 
         if (userOptional.isPresent()) {
             User user = userOptional.get();
             
-            // Compare the raw password with the hashed password in the DB
             if (passwordEncoder.matches(loginDto.getPassword(), user.getPasswordHash())) {
                 
-                // Return user details so the frontend knows who logged in and their role
+                // 1. Load UserDetails and tell Spring Security the user is authenticated
+                UserDetails userDetails = customUserDetailsService.loadUserByUsername(loginDto.getEmail());
+                UsernamePasswordAuthenticationToken authentication = 
+                    new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+                
+                // 2. Tie the authentication to the HTTP session
+                HttpSession session = request.getSession(true);
+                session.setAttribute("SPRING_SECURITY_CONTEXT", SecurityContextHolder.getContext());
+
                 Map<String, Object> response = new HashMap<>();
                 response.put("message", "Login successful");
                 response.put("userId", user.getId());
@@ -70,20 +85,16 @@ public class AuthController {
                 return ResponseEntity.ok(response);
             }
         }
-
-        // If email doesn't exist or password doesn't match
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid email or password");
     }
 
     @PostMapping("/logout")
     public ResponseEntity<?> logoutUser(HttpServletRequest request) {
-        // Invalidate the session on the server side
+        SecurityContextHolder.clearContext();
         HttpSession session = request.getSession(false);
         if (session != null) {
             session.invalidate();
         }
-        
-        // The frontend will also need to delete the user's credentials from local storage
         return ResponseEntity.ok("Logged out successfully");
     }
 }

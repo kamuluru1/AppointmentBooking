@@ -15,17 +15,18 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
+            .cors(Customizer.withDefaults()) // Added CORS configuration here
             .csrf(csrf -> csrf.disable()) 
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/login", "/api/auth/register").permitAll()
                 
-                // Admin specific [cite: 13, 14, 15, 16, 17]
+                // Admin specific
                 .requestMatchers(HttpMethod.POST, "/api/rooms/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/rooms/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/rooms/**").hasRole("ADMIN")
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 
-                // Shared Endpoints [cite: 18, 19, 20, 21, 22]
+                // Shared Endpoints
                 .requestMatchers(HttpMethod.GET, "/api/rooms/**").hasAnyRole("USER", "ADMIN")
                 .requestMatchers("/api/bookings/**").hasAnyRole("USER", "ADMIN")
                 
