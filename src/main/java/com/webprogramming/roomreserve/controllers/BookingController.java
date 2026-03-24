@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.webprogramming.roomreserve.dto.BookingRequest;
 import com.webprogramming.roomreserve.entities.Booking;
+import com.webprogramming.roomreserve.repositories.BookingRepository;
 import com.webprogramming.roomreserve.services.BookingService;
 
 @RestController
@@ -21,6 +22,9 @@ public class BookingController {
 
     @Autowired
     private BookingService bookingService;
+
+    @Autowired
+    private BookingRepository bookingRepository;
 
     @PostMapping
     public ResponseEntity<?> bookRoom(@RequestBody BookingRequest dto) {
@@ -44,8 +48,7 @@ public class BookingController {
         }
     }
 
-    @Autowired
-    private com.webprogramming.roomreserve.repositories.BookingRepository bookingRepository;
+    
 
     // View all bookings across all rooms (Admin functionality)
     @GetMapping
@@ -58,4 +61,6 @@ public class BookingController {
     public ResponseEntity<?> getUserBookings(@PathVariable Long userId) {
         return ResponseEntity.ok(bookingRepository.findByUserId(userId));
     }
+
+
 }
