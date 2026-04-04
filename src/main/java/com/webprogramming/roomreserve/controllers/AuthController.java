@@ -48,9 +48,15 @@ public class AuthController {
         User user = new User();
         user.setName(registerDto.getName());
         user.setEmail(registerDto.getEmail());
-        user.setPasswordHash(passwordEncoder.encode(registerDto.getPassword())); 
-        user.setRole("ROLE_USER"); 
+        user.setPasswordHash(passwordEncoder.encode(registerDto.getPassword()));
         user.setCreatedAt(LocalDateTime.now());
+
+        // Allow Postman to define the role
+        if (registerDto.getRole() != null && registerDto.getRole().equalsIgnoreCase("admin")) {
+            user.setRole("ROLE_ADMIN");
+        } else {
+            user.setRole("ROLE_USER");
+        }
 
         userRepository.save(user);
 
