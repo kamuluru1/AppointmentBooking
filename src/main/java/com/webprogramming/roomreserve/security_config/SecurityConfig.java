@@ -21,9 +21,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/login", "/api/auth/register").permitAll()
                 
                 // Admin specific
-                .requestMatchers(HttpMethod.POST, "/api/rooms/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.PUT, "/api/rooms/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.DELETE, "/api/rooms/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/rooms", "/api/rooms/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/rooms", "/api/rooms/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/rooms", "/api/rooms/**").hasRole("ADMIN")
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 
                 // Shared Endpoints
