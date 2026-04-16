@@ -9,9 +9,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,6 +27,7 @@ import com.webprogramming.roomreserve.repositories.UserRepository;
 import com.webprogramming.roomreserve.security_config.CustomUserDetailsService;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 
 @RestController
@@ -39,6 +43,9 @@ public class AuthController {
     @Autowired
     private CustomUserDetailsService customUserDetailsService;
 
+    // Instantiate the repository used to save the security context
+    private SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
+
     @PostMapping("/register")
     public ResponseEntity<?> registerUser(@RequestBody RegisterDto registerDto) {
         if (userRepository.findByEmail(registerDto.getEmail()).isPresent()) {
@@ -51,7 +58,6 @@ public class AuthController {
         user.setPasswordHash(passwordEncoder.encode(registerDto.getPassword()));
         user.setCreatedAt(LocalDateTime.now());
 
-        // Allow Postman to define the role
         if (registerDto.getRole() != null && registerDto.getRole().equalsIgnoreCase("admin")) {
             user.setRole("ROLE_ADMIN");
         } else {
@@ -64,7 +70,8 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> loginUser(@RequestBody LoginDto loginDto, HttpServletRequest request) {
+    // Note the addition of HttpServletResponse here
+    public ResponseEntity<?> loginUser(@RequestBody LoginDto loginDto, HttpServletRequest request, HttpServletResponse response) {
         Optional<User> userOptional = userRepository.findByEmail(loginDto.getEmail());
 
         if (userOptional.isPresent()) {
@@ -72,23 +79,23 @@ public class AuthController {
             
             if (passwordEncoder.matches(loginDto.getPassword(), user.getPasswordHash())) {
                 
-                // 1. Load UserDetails and tell Spring Security the user is authenticated
                 UserDetails userDetails = customUserDetailsService.loadUserByUsername(loginDto.getEmail());
                 UsernamePasswordAuthenticationToken authentication = 
                     new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-                SecurityContextHolder.getContext().setAuthentication(authentication);
                 
-                // 2. Tie the authentication to the HTTP session
-                HttpSession session = request.getSession(true);
-                session.setAttribute("SPRING_SECURITY_CONTEXT", SecurityContextHolder.getContext());
+                // Explicitly create, set, and save the SecurityContext
+                SecurityContext context = SecurityContextHolder.createEmptyContext();
+                context.setAuthentication(authentication);
+                SecurityContextHolder.setContext(context);
+                securityContextRepository.saveContext(context, request, response);
 
-                Map<String, Object> response = new HashMap<>();
-                response.put("message", "Login successful");
-                response.put("userId", user.getId());
-                response.put("name", user.getName());
-                response.put("role", user.getRole());
+                Map<String, Object> responseBody = new HashMap<>();
+                responseBody.put("message", "Login successful");
+                responseBody.put("userId", user.getId());
+                responseBody.put("name", user.getName());
+                responseBody.put("role", user.getRole());
                 
-                return ResponseEntity.ok(response);
+                return ResponseEntity.ok(responseBody);
             }
         }
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid email or password");

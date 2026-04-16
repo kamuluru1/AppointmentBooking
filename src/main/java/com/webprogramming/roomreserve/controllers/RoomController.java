@@ -3,6 +3,7 @@ package com.webprogramming.roomreserve.controllers;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.webprogramming.roomreserve.entities.Room;
 import com.webprogramming.roomreserve.services.RoomService;
+
 
 @RestController
 @RequestMapping("/api/rooms")
@@ -47,7 +49,11 @@ public class RoomController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteRoom(@PathVariable Long id) {
-        roomService.deleteRoom(id);
-        return ResponseEntity.ok("Room deleted successfully");
+        try {
+            roomService.deleteRoom(id);
+            return ResponseEntity.ok("Room deleted successfully");
+        } catch (DataIntegrityViolationException e) {
+            return ResponseEntity.badRequest().body("Cannot delete this room because it has existing bookings.");
+        }
     }
 }

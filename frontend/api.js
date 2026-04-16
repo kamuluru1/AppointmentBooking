@@ -4,7 +4,7 @@
  * Auth: session cookie (credentials: 'include')
  */
 
-const BASE = 'http://localhost:8080';
+const BASE = 'http://127.0.0.1:8080';
 
 const api = {
 
