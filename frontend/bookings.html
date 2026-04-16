@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RoomReserve — My Bookings</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="app-shell">
+
+  <header class="topbar">
+    <div class="topbar-logo">room<span>/</span>reserve</div>
+    <div class="topbar-right">
+      <span class="topbar-user">Signed in as <strong id="topName"></strong></span>
+      <button class="btn btn-ghost btn-sm" onclick="handleLogout()">Sign out</button>
+    </div>
+  </header>
+
+  <nav class="sidebar">
+    <div class="sidebar-section">Menu</div>
+    <button class="nav-item" onclick="goTo('dashboard.html')"><span class="icon">◈</span> Dashboard</button>
+    <button class="nav-item" onclick="goTo('rooms.html')"><span class="icon">⊞</span> Rooms</button>
+    <button class="nav-item" onclick="goTo('book.html')"><span class="icon">＋</span> Book a Room</button>
+    <button class="nav-item active" onclick="goTo('bookings.html')"><span class="icon">≡</span> My Bookings</button>
+    <div id="adminNav" class="hidden">
+      <div class="sidebar-section">Admin</div>
+      <button class="nav-item" onclick="goTo('admin-rooms.html')"><span class="icon">⊙</span> Manage Rooms</button>
+      <button class="nav-item" onclick="goTo('admin-bookings.html')"><span class="icon">⊛</span> All Bookings</button>
+    </div>
+    <div class="sidebar-bottom">
+      <button class="nav-item" onclick="handleLogout()"><span class="icon">→</span> Sign out</button>
+    </div>
+  </nav>
+
+  <main class="main-content">
+    <div class="page-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+      <div>
+        <h1>My Bookings</h1>
+        <p>View and manage your room reservations</p>
+      </div>
+      <button class="btn btn-success btn-sm" onclick="goTo('book.html')">＋ New Booking</button>
+    </div>
+
+    <div id="bookingsContainer">
+      <div class="loading-center"><span class="spinner"></span> Loading bookings…</div>
+    </div>
+  </main>
+</div>
+
+<script src="api.js"></script>
+<script>
+  if (!requireAuth()) throw new Error();
+  document.getElementById('topName').textContent = currentUserName();
+  if (isAdmin()) document.getElementById('adminNav').classList.remove('hidden');
+  function goTo(p) { window.location.href = p; }
+  async function handleLogout() {
+    try { await api.logout(); } catch {}
+    sessionStorage.clear(); window.location.href = 'login.html';
+  }
+
+  function esc(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  }
+
+  function statusBadge(status) {
+    const s = (status || '').toLowerCase();
+    if (s === 'confirmed' || s === 'active') return '<span class="badge available">Confirmed</span>';
+    if (s === 'cancelled' || s === 'canceled') return '<span class="badge unavailable">Cancelled</span>';
+    return `<span class="badge amber">${esc(status)}</span>`;
+  }
+
+  async function cancelBooking(id) {
+    if (!confirm('Cancel this booking?')) return;
+    try {
+      await api.cancelBooking(id, currentUserId());
+      showToast('Booking cancelled.', 'success');
+      loadBookings();
+    } catch (err) {
+      showToast(err.message || 'Could not cancel.', 'error');
+    }
+  }
+
+  async function loadBookings() {
+    const c = document.getElementById('bookingsContainer');
+    c.innerHTML = '<div class="loading-center"><span class="spinner"></span> Loading…</div>';
+    try {
+      const bookings = await api.getUserBookings(currentUserId());
+      if (!bookings.length) {
+        c.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">≡</div>
+            <p>You have no bookings yet.</p>
+            <button class="btn btn-ghost btn-sm" style="margin-top:14px" onclick="goTo('book.html')">Book a room</button>
+          </div>`;
+        return;
+      }
+
+      // Sort newest first
+      bookings.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+      c.innerHTML = `
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Room</th>
+                <th>Location</th>
+                <th>Start</th>
+                <th>End</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${bookings.map(b => {
+                const isCancelled = ['cancelled','canceled'].includes((b.status||'').toLowerCase());
+                return `
+                  <tr>
+                    <td class="td-mono">#${b.id}</td>
+                    <td><strong>${esc(b.room?.name || '—')}</strong></td>
+                    <td class="text-muted">${esc(b.room?.location || '—')}</td>
+                    <td class="td-mono">${fmtDate(b.startTime)}</td>
+                    <td class="td-mono">${fmtDate(b.endTime)}</td>
+                    <td>${statusBadge(b.status)}</td>
+                    <td>
+                      ${!isCancelled
+                        ? `<button class="btn btn-danger btn-sm" onclick="cancelBooking(${b.id})">Cancel</button>`
+                        : `<span class="text-muted text-sm">—</span>`
+                      }
+                    </td>
+                  </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    } catch (err) {
+      c.innerHTML = `<div class="alert alert-error">Failed to load bookings: ${esc(err.message)}</div>`;
+    }
+  }
+
+  loadBookings();
+</script>
+</body>
+</html>

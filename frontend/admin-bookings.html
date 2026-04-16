@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RoomReserve — All Bookings</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="app-shell">
+
+  <header class="topbar">
+    <div class="topbar-logo">room<span>/</span>reserve</div>
+    <div class="topbar-right">
+      <span class="topbar-user">Signed in as <strong id="topName"></strong> <span class="badge amber" style="margin-left:6px">Admin</span></span>
+      <button class="btn btn-ghost btn-sm" onclick="handleLogout()">Sign out</button>
+    </div>
+  </header>
+
+  <nav class="sidebar">
+    <div class="sidebar-section">Menu</div>
+    <button class="nav-item" onclick="goTo('dashboard.html')"><span class="icon">◈</span> Dashboard</button>
+    <button class="nav-item" onclick="goTo('rooms.html')"><span class="icon">⊞</span> Rooms</button>
+    <button class="nav-item" onclick="goTo('book.html')"><span class="icon">＋</span> Book a Room</button>
+    <button class="nav-item" onclick="goTo('bookings.html')"><span class="icon">≡</span> My Bookings</button>
+    <div class="sidebar-section">Admin</div>
+    <button class="nav-item" onclick="goTo('admin-rooms.html')"><span class="icon">⊙</span> Manage Rooms</button>
+    <button class="nav-item active" onclick="goTo('admin-bookings.html')"><span class="icon">⊛</span> All Bookings</button>
+    <div class="sidebar-bottom">
+      <button class="nav-item" onclick="handleLogout()"><span class="icon">→</span> Sign out</button>
+    </div>
+  </nav>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1>All Bookings</h1>
+      <p>System-wide view of every reservation</p>
+    </div>
+
+    <!-- Summary stats -->
+    <div class="stats-grid" id="statsRow" style="margin-bottom:24px; grid-template-columns: repeat(auto-fit, minmax(130px,1fr));">
+      <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value accent" id="sTotal">—</div></div>
+      <div class="stat-card"><div class="stat-label">Confirmed</div><div class="stat-value green" id="sConfirmed">—</div></div>
+      <div class="stat-card"><div class="stat-label">Cancelled</div><div class="stat-value" style="color:var(--red)" id="sCancelled">—</div></div>
+    </div>
+
+    <!-- Filter -->
+    <div class="flex gap-3 mb-3" style="flex-wrap:wrap;">
+      <input id="search" class="form-input" style="max-width:240px" placeholder="Search user or room…" oninput="renderTable()" />
+      <select id="filterStatus" class="form-select" style="max-width:160px" onchange="renderTable()">
+        <option value="">All statuses</option>
+        <option value="confirmed">Confirmed</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+    </div>
+
+    <div id="tableContainer">
+      <div class="loading-center"><span class="spinner"></span> Loading…</div>
+    </div>
+  </main>
+</div>
+
+<script src="api.js"></script>
+<script>
+  if (!requireAuth()) throw new Error();
+  if (!isAdmin()) { window.location.href = 'dashboard.html'; }
+  document.getElementById('topName').textContent = currentUserName();
+  function goTo(p) { window.location.href = p; }
+  async function handleLogout() {
+    try { await api.logout(); } catch {}
+    sessionStorage.clear(); window.location.href = 'login.html';
+  }
+
+  function esc(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  }
+
+  function statusBadge(status) {
+    const s = (status || '').toLowerCase();
+    if (s === 'confirmed' || s === 'active') return '<span class="badge available">Confirmed</span>';
+    if (s === 'cancelled' || s === 'canceled') return '<span class="badge unavailable">Cancelled</span>';
+    return `<span class="badge amber">${esc(status)}</span>`;
+  }
+
+  let allBookings = [];
+
+  function renderTable() {
+    const q = document.getElementById('search').value.toLowerCase();
+    const st = document.getElementById('filterStatus').value.toLowerCase();
+
+    const filtered = allBookings.filter(b => {
+      const userName = (b.user?.name || '').toLowerCase();
+      const roomName = (b.room?.name || '').toLowerCase();
+      const matchQ  = !q  || userName.includes(q) || roomName.includes(q);
+      const matchSt = !st || (b.status || '').toLowerCase().includes(st);
+      return matchQ && matchSt;
+    });
+
+    const c = document.getElementById('tableContainer');
+    if (!filtered.length) {
+      c.innerHTML = '<div class="empty-state"><div class="icon">⊛</div><p>No bookings match your filters.</p></div>';
+      return;
+    }
+
+    c.innerHTML = `
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>#</th><th>User</th><th>Room</th><th>Start</th><th>End</th><th>Status</th><th>Booked On</th></tr>
+          </thead>
+          <tbody>
+            ${filtered.map(b => `
+              <tr>
+                <td class="td-mono">#${b.id}</td>
+                <td>
+                  <strong>${esc(b.user?.name || '—')}</strong>
+                  <div class="text-muted text-sm">${esc(b.user?.email || '')}</div>
+                </td>
+                <td>
+                  <strong>${esc(b.room?.name || '—')}</strong>
+                  <div class="text-muted text-sm">${esc(b.room?.location || '')}</div>
+                </td>
+                <td class="td-mono">${fmtDate(b.startTime)}</td>
+                <td class="td-mono">${fmtDate(b.endTime)}</td>
+                <td>${statusBadge(b.status)}</td>
+                <td class="td-mono">${fmtDate(b.createdAt)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  async function loadAllBookings() {
+    try {
+      allBookings = await api.getAllBookings();
+      allBookings.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+      // Stats
+      document.getElementById('sTotal').textContent = allBookings.length;
+      const confirmed = allBookings.filter(b => !['cancelled','canceled'].includes((b.status||'').toLowerCase())).length;
+      const cancelled = allBookings.length - confirmed;
+      document.getElementById('sConfirmed').textContent = confirmed;
+      document.getElementById('sCancelled').textContent = cancelled;
+
+      renderTable();
+    } catch (err) {
+      document.getElementById('tableContainer').innerHTML =
+        `<div class="alert alert-error">Failed to load bookings: ${esc(err.message)}</div>`;
+    }
+  }
+
+  loadAllBookings();
+</script>
+</body>
+</html>

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RoomReserve — Manage Rooms</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="app-shell">
+
+  <header class="topbar">
+    <div class="topbar-logo">room<span>/</span>reserve</div>
+    <div class="topbar-right">
+      <span class="topbar-user">Signed in as <strong id="topName"></strong> <span class="badge amber" style="margin-left:6px">Admin</span></span>
+      <button class="btn btn-ghost btn-sm" onclick="handleLogout()">Sign out</button>
+    </div>
+  </header>
+
+  <nav class="sidebar">
+    <div class="sidebar-section">Menu</div>
+    <button class="nav-item" onclick="goTo('dashboard.html')"><span class="icon">◈</span> Dashboard</button>
+    <button class="nav-item" onclick="goTo('rooms.html')"><span class="icon">⊞</span> Rooms</button>
+    <button class="nav-item" onclick="goTo('book.html')"><span class="icon">＋</span> Book a Room</button>
+    <button class="nav-item" onclick="goTo('bookings.html')"><span class="icon">≡</span> My Bookings</button>
+    <div class="sidebar-section">Admin</div>
+    <button class="nav-item active" onclick="goTo('admin-rooms.html')"><span class="icon">⊙</span> Manage Rooms</button>
+    <button class="nav-item" onclick="goTo('admin-bookings.html')"><span class="icon">⊛</span> All Bookings</button>
+    <div class="sidebar-bottom">
+      <button class="nav-item" onclick="handleLogout()"><span class="icon">→</span> Sign out</button>
+    </div>
+  </nav>
+
+  <main class="main-content">
+    <div class="page-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+      <div>
+        <h1>Manage Rooms</h1>
+        <p>Add, edit, or remove rooms from the system</p>
+      </div>
+      <button class="btn btn-primary btn-sm" style="width:auto;" onclick="openModal()">＋ Add Room</button>
+    </div>
+
+    <div id="roomsContainer">
+      <div class="loading-center"><span class="spinner"></span> Loading rooms…</div>
+    </div>
+  </main>
+</div>
+
+<!-- ADD / EDIT MODAL -->
+<div id="roomModal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modalTitle">Add Room</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+
+    <div id="modalError" class="alert alert-error hidden"></div>
+
+    <input type="hidden" id="editId" />
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Name</label>
+        <input id="rName" class="form-input" placeholder="Conference Room A" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <input id="rType" class="form-input" placeholder="Conference, Lab, Office…" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Capacity</label>
+        <input id="rCapacity" type="number" class="form-input" placeholder="10" min="1" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Location</label>
+        <input id="rLocation" class="form-input" placeholder="Building A, Floor 2" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Status</label>
+      <select id="rStatus" class="form-select">
+        <option value="available">Available</option>
+        <option value="unavailable">Unavailable</option>
+      </select>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button id="saveBtn" class="btn btn-primary" style="width:auto;" onclick="saveRoom()">Save Room</button>
+    </div>
+  </div>
+</div>
+
+<script src="api.js"></script>
+<script>
+  if (!requireAuth()) throw new Error();
+  if (!isAdmin()) { window.location.href = 'dashboard.html'; }
+  document.getElementById('topName').textContent = currentUserName();
+  function goTo(p) { window.location.href = p; }
+  async function handleLogout() {
+    try { await api.logout(); } catch {}
+    sessionStorage.clear(); window.location.href = 'login.html';
+  }
+
+  function esc(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function openModal(room = null) {
+    document.getElementById('modalTitle').textContent = room ? 'Edit Room' : 'Add Room';
+    document.getElementById('editId').value      = room?.id ?? '';
+    document.getElementById('rName').value       = room?.name ?? '';
+    document.getElementById('rType').value       = room?.type ?? '';
+    document.getElementById('rCapacity').value   = room?.capacity ?? '';
+    document.getElementById('rLocation').value   = room?.location ?? '';
+    document.getElementById('rStatus').value     = room?.status ?? 'available';
+    document.getElementById('modalError').classList.add('hidden');
+    document.getElementById('roomModal').classList.add('open');
+  }
+
+  function closeModal() {
+    document.getElementById('roomModal').classList.remove('open');
+  }
+
+  async function saveRoom() {
+    const id       = document.getElementById('editId').value;
+    const name     = document.getElementById('rName').value.trim();
+    const type     = document.getElementById('rType').value.trim();
+    const capacity = parseInt(document.getElementById('rCapacity').value, 10);
+    const location = document.getElementById('rLocation').value.trim();
+    const status   = document.getElementById('rStatus').value;
+    const errEl    = document.getElementById('modalError');
+    const btn      = document.getElementById('saveBtn');
+
+    errEl.classList.add('hidden');
+    if (!name) { errEl.textContent = 'Room name is required.'; errEl.classList.remove('hidden'); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+
+    const payload = { name, type, capacity: isNaN(capacity) ? null : capacity, location, status };
+
+    try {
+      if (id) {
+        await api.updateRoom(id, payload);
+        showToast('Room updated.', 'success');
+      } else {
+        await api.createRoom(payload);
+        showToast('Room created.', 'success');
+      }
+      closeModal();
+      loadRooms();
+    } catch (err) {
+      errEl.textContent = err.message || 'Save failed.';
+      errEl.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Save Room';
+    }
+  }
+
+  async function deleteRoom(id, name) {
+    if (!confirm(`Delete room "${name}"? This cannot be undone.`)) return;
+    try {
+      await api.deleteRoom(id);
+      showToast('Room deleted.', 'success');
+      loadRooms();
+    } catch (err) {
+      showToast(err.message || 'Delete failed.', 'error');
+    }
+  }
+
+  async function loadRooms() {
+    const c = document.getElementById('roomsContainer');
+    c.innerHTML = '<div class="loading-center"><span class="spinner"></span> Loading…</div>';
+    try {
+      const rooms = await api.getRooms();
+      if (!rooms.length) {
+        c.innerHTML = '<div class="empty-state"><div class="icon">⊞</div><p>No rooms yet. Add one above.</p></div>';
+        return;
+      }
+      c.innerHTML = `
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Name</th><th>Type</th><th>Capacity</th><th>Location</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              ${rooms.map(r => `
+                <tr>
+                  <td class="td-mono">${r.id}</td>
+                  <td><strong>${esc(r.name)}</strong></td>
+                  <td>${esc(r.type || '—')}</td>
+                  <td>${r.capacity ?? '—'}</td>
+                  <td class="text-muted">${esc(r.location || '—')}</td>
+                  <td>
+                    <span class="badge ${(r.status||'').toLowerCase() === 'unavailable' ? 'unavailable' : 'available'}">
+                      ${esc(r.status || 'available')}
+                    </span>
+                  </td>
+                  <td>
+                    <div class="flex gap-2">
+                      <button class="btn btn-ghost btn-sm" onclick='openModal(${JSON.stringify(r)})'>Edit</button>
+                      <button class="btn btn-danger btn-sm" onclick="deleteRoom(${r.id}, '${esc(r.name)}')">Delete</button>
+                    </div>
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    } catch (err) {
+      c.innerHTML = `<div class="alert alert-error">Failed to load rooms: ${esc(err.message)}</div>`;
+    }
+  }
+
+  // Close modal on overlay click
+  document.getElementById('roomModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal();
+  });
+
+  loadRooms();
+</script>
+</body>
+</html>

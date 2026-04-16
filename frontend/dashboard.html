@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RoomReserve — Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="shell" class="app-shell">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="topbar-logo">room<span>/</span>reserve</div>
+    <div class="topbar-right">
+      <span class="topbar-user">Signed in as <strong id="topName"></strong></span>
+      <button class="btn btn-ghost btn-sm" onclick="handleLogout()">Sign out</button>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="sidebar-section">Menu</div>
+    <button class="nav-item active" onclick="goTo('dashboard.html')">
+      <span class="icon">◈</span> Dashboard
+    </button>
+    <button class="nav-item" onclick="goTo('rooms.html')">
+      <span class="icon">⊞</span> Rooms
+    </button>
+    <button class="nav-item" onclick="goTo('book.html')">
+      <span class="icon">＋</span> Book a Room
+    </button>
+    <button class="nav-item" onclick="goTo('bookings.html')">
+      <span class="icon">≡</span> My Bookings
+    </button>
+    <div id="adminNav" class="hidden">
+      <div class="sidebar-section">Admin</div>
+      <button class="nav-item" onclick="goTo('admin-rooms.html')">
+        <span class="icon">⊙</span> Manage Rooms
+      </button>
+      <button class="nav-item" onclick="goTo('admin-bookings.html')">
+        <span class="icon">⊛</span> All Bookings
+      </button>
+    </div>
+    <div class="sidebar-bottom">
+      <button class="nav-item" onclick="handleLogout()">
+        <span class="icon">→</span> Sign out
+      </button>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main-content">
+    <div class="page-header">
+      <h1>Dashboard</h1>
+      <p id="welcomeMsg"></p>
+    </div>
+
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card">
+        <div class="stat-label">Total Rooms</div>
+        <div class="stat-value accent" id="statRooms">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">My Bookings</div>
+        <div class="stat-value green" id="statMyBookings">—</div>
+      </div>
+      <div id="adminStats" class="hidden" style="display:contents">
+        <div class="stat-card">
+          <div class="stat-label">All Bookings</div>
+          <div class="stat-value amber" id="statAllBookings">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Users</div>
+          <div class="stat-value" id="statUsers">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Available Rooms</span>
+        <button class="btn btn-ghost btn-sm" onclick="goTo('book.html')">Book a room →</button>
+      </div>
+      <div id="dashRooms">
+        <div class="loading-center"><span class="spinner"></span> Loading rooms…</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="api.js"></script>
+<script>
+  if (!requireAuth()) throw new Error('Not authenticated');
+
+  document.getElementById('topName').textContent = currentUserName();
+  document.getElementById('welcomeMsg').textContent =
+    `Welcome back, ${currentUserName()}. Here's what's happening today.`;
+
+  if (isAdmin()) {
+    document.getElementById('adminNav').classList.remove('hidden');
+    document.getElementById('adminStats').classList.remove('hidden');
+  }
+
+  function goTo(page) { window.location.href = page; }
+
+  async function handleLogout() {
+    try { await api.logout(); } catch {}
+    sessionStorage.clear();
+    window.location.href = 'login.html';
+  }
+
+  async function loadDashboard() {
+    try {
+      const rooms = await api.getRooms();
+      document.getElementById('statRooms').textContent = rooms.length;
+
+      const myBookings = await api.getUserBookings(currentUserId());
+      document.getElementById('statMyBookings').textContent = myBookings.length;
+
+      if (isAdmin()) {
+        const analytics = await api.getAnalytics();
+        document.getElementById('statAllBookings').textContent = analytics.totalBookings;
+        document.getElementById('statUsers').textContent       = analytics.totalUsers;
+      }
+
+      // Render rooms preview
+      const container = document.getElementById('dashRooms');
+      if (!rooms.length) {
+        container.innerHTML = '<div class="empty-state"><div class="icon">⊞</div><p>No rooms found.</p></div>';
+        return;
+      }
+
+      const available = rooms.filter(r => (r.status || '').toLowerCase() !== 'unavailable');
+      container.innerHTML = `
+        <div class="rooms-grid">
+          ${available.slice(0, 6).map(r => `
+            <div class="room-card">
+              <div class="room-name">${esc(r.name)}</div>
+              <div class="room-meta">
+                <span class="badge accent">${esc(r.type || 'Room')}</span>
+                <span class="badge">${esc(r.location || '—')}</span>
+                <span class="badge">Cap: ${r.capacity || '?'}</span>
+                <span class="badge available">Available</span>
+              </div>
+              <div class="room-actions">
+                <button class="btn btn-success btn-sm" onclick="goTo('book.html?roomId=${r.id}')">
+                  Book now
+                </button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        ${available.length > 6 ? `<p class="text-muted text-sm" style="margin-top:12px">Showing 6 of ${available.length} available rooms. <a href="rooms.html" style="color:var(--accent2)">View all →</a></p>` : ''}
+      `;
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function esc(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  loadDashboard();
+</script>
+</body>
+</html>
