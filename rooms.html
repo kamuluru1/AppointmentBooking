@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RoomReserve — Rooms</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="app-shell">
+
+  <header class="topbar">
+    <div class="topbar-logo">room<span>/</span>reserve</div>
+    <div class="topbar-right">
+      <span class="topbar-user">Signed in as <strong id="topName"></strong></span>
+      <button class="btn btn-ghost btn-sm" onclick="handleLogout()">Sign out</button>
+    </div>
+  </header>
+
+  <nav class="sidebar">
+    <div class="sidebar-section">Menu</div>
+    <button class="nav-item" onclick="goTo('dashboard.html')"><span class="icon">◈</span> Dashboard</button>
+    <button class="nav-item active" onclick="goTo('rooms.html')"><span class="icon">⊞</span> Rooms</button>
+    <button class="nav-item" onclick="goTo('book.html')"><span class="icon">＋</span> Book a Room</button>
+    <button class="nav-item" onclick="goTo('bookings.html')"><span class="icon">≡</span> My Bookings</button>
+    <div id="adminNav" class="hidden">
+      <div class="sidebar-section">Admin</div>
+      <button class="nav-item" onclick="goTo('admin-rooms.html')"><span class="icon">⊙</span> Manage Rooms</button>
+      <button class="nav-item" onclick="goTo('admin-bookings.html')"><span class="icon">⊛</span> All Bookings</button>
+    </div>
+    <div class="sidebar-bottom">
+      <button class="nav-item" onclick="handleLogout()"><span class="icon">→</span> Sign out</button>
+    </div>
+  </nav>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1>Rooms</h1>
+      <p>Browse all available rooms for reservation</p>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="flex gap-3 mb-3" style="flex-wrap:wrap; align-items:center;">
+      <input id="search" class="form-input" style="max-width:240px" placeholder="Search rooms…" oninput="renderRooms()" />
+      <select id="filterType" class="form-select" style="max-width:160px" onchange="renderRooms()">
+        <option value="">All types</option>
+      </select>
+    </div>
+
+    <div id="roomsContainer">
+      <div class="loading-center"><span class="spinner"></span> Loading rooms…</div>
+    </div>
+  </main>
+</div>
+
+<script src="api.js"></script>
+<script>
+  if (!requireAuth()) throw new Error();
+  document.getElementById('topName').textContent = currentUserName();
+  if (isAdmin()) document.getElementById('adminNav').classList.remove('hidden');
+  function goTo(p) { window.location.href = p; }
+  async function handleLogout() {
+    try { await api.logout(); } catch {}
+    sessionStorage.clear(); window.location.href = 'login.html';
+  }
+
+  let allRooms = [];
+
+  function esc(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function renderRooms() {
+    const q    = document.getElementById('search').value.toLowerCase();
+    const type = document.getElementById('filterType').value;
+
+    const filtered = allRooms.filter(r => {
+      const matchQ = !q || r.name?.toLowerCase().includes(q) || r.location?.toLowerCase().includes(q);
+      const matchT = !type || r.type === type;
+      return matchQ && matchT;
+    });
+
+    const c = document.getElementById('roomsContainer');
+    if (!filtered.length) {
+      c.innerHTML = '<div class="empty-state"><div class="icon">⊞</div><p>No rooms match your filters.</p></div>';
+      return;
+    }
+
+    c.innerHTML = `<div class="rooms-grid">${filtered.map(r => {
+      const status = (r.status || 'available').toLowerCase();
+      const isAvail = status !== 'unavailable';
+      return `
+        <div class="room-card">
+          <div class="room-name">${esc(r.name)}</div>
+          <div class="room-meta">
+            <span class="badge accent">${esc(r.type || 'Room')}</span>
+            <span class="badge">${esc(r.location || 'N/A')}</span>
+            <span class="badge">Cap: ${r.capacity ?? '?'}</span>
+            <span class="badge ${isAvail ? 'available' : 'unavailable'}">${isAvail ? 'Available' : 'Unavailable'}</span>
+          </div>
+          <div class="room-actions">
+            ${isAvail
+              ? `<button class="btn btn-success btn-sm" onclick="goTo('book.html?roomId=${r.id}')">Book</button>`
+              : `<button class="btn btn-ghost btn-sm" disabled>Unavailable</button>`
+            }
+          </div>
+        </div>`;
+    }).join('')}</div>`;
+  }
+
+  async function loadRooms() {
+    try {
+      allRooms = await api.getRooms();
+
+      // Populate type filter
+      const types = [...new Set(allRooms.map(r => r.type).filter(Boolean))];
+      const sel = document.getElementById('filterType');
+      types.forEach(t => {
+        const o = document.createElement('option');
+        o.value = t; o.textContent = t;
+        sel.appendChild(o);
+      });
+
+      renderRooms();
+    } catch (err) {
+      document.getElementById('roomsContainer').innerHTML =
+        `<div class="alert alert-error">Failed to load rooms: ${esc(err.message)}</div>`;
+    }
+  }
+
+  loadRooms();
+</script>
+</body>
+</html>
